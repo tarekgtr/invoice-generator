@@ -22,13 +22,20 @@ ENV NODE_ENV=production \
     # LibreOffice writes a per-run user profile under HOME; keep it writable.
     HOME=/tmp
 
-# LibreOffice (headless) + metric-compatible fonts so Word documents render
-# with the right look:
-#   - carlito  -> Calibri      - caladea -> Cambria
-#   - liberation -> Arial / Times New Roman / Courier New
-RUN apt-get update \
+# LibreOffice (headless) + fonts. ttf-mscorefonts-installer provides the
+# genuine Microsoft fonts (Times New Roman, Arial, Courier New, etc.); the
+# others are metric-compatible fallbacks (carlito -> Calibri, caladea ->
+# Cambria, liberation -> Arial/Times/Courier).
+# ttf-mscorefonts-installer lives in Debian's "contrib" component and needs the
+# EULA pre-accepted; it downloads the fonts at build time.
+RUN echo "deb http://deb.debian.org/debian bookworm contrib non-free non-free-firmware" \
+        > /etc/apt/sources.list.d/contrib.list \
+    && apt-get update \
+    && echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" \
+        | debconf-set-selections \
     && apt-get install -y --no-install-recommends \
         libreoffice-writer \
+        ttf-mscorefonts-installer \
         fonts-liberation \
         fonts-crosextra-carlito \
         fonts-crosextra-caladea \

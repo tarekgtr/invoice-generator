@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s --max-time 120 -o /tmp/render.pdf -w 'HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n' -X POST https://invoice-generator-vdom.onrender.com/api/generate -H 'Content-Type: application/json' -d '{\"status\":\"Completed\",\"name2\":\"Jane Doe\",\"iban2\":\"DE89370400440532013000\",\"bic\":\"COBADEFFXXX\",\"bank\":\"Commerzbank\",\"IBD\":\"IBD-2026-0001\",\"name1\":\"John Smith\",\"iban1\":\"FR7630006000011234567890189\",\"amount\":\"12500\",\"details\":\"Invoice settlement\",\"date\":\"2026-06-23\",\"time\":\"14:30\"}')",
+      "Bash(docker build *)",
+      "Bash(docker run *)"
+    ]
+  }
+}
