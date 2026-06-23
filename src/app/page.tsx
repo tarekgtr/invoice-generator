@@ -22,8 +22,18 @@ const SECTIONS: Section[] = [
   {
     title: "Document",
     fields: [
-      { name: "status", label: "Status", type: "text", placeholder: "e.g. Completed" },
-      { name: "IBD", label: "Document ID", type: "text", placeholder: "e.g. IBD-2026-0001" },
+      {
+        name: "status",
+        label: "Status",
+        type: "text",
+        placeholder: "e.g. Completed",
+      },
+      {
+        name: "IBD",
+        label: "Document ID",
+        type: "text",
+        placeholder: "e.g. IBD-2026-0001",
+      },
     ],
   },
   {
@@ -39,7 +49,11 @@ const SECTIONS: Section[] = [
     title: "Ordering Customer",
     fields: [
       { name: "name1", label: "Ordering Customer Name", type: "text" },
-      { name: "iban1", label: "Ordering Customer Account (IBAN)", type: "text" },
+      {
+        name: "iban1",
+        label: "Ordering Customer Account (IBAN)",
+        type: "text",
+      },
     ],
   },
   {
@@ -122,7 +136,8 @@ export default function Home() {
             MYFIN Report Generator
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Fill in the details below to generate and download the report as a PDF.
+            Fill in the details below to generate and download the report as a
+            PDF.
           </p>
         </header>
 
@@ -149,7 +164,9 @@ export default function Home() {
                         id={field.name}
                         name={field.name}
                         type={field.type}
-                        inputMode={field.type === "number" ? "decimal" : undefined}
+                        inputMode={
+                          field.type === "number" ? "decimal" : undefined
+                        }
                         step={field.type === "number" ? "any" : undefined}
                         placeholder={field.placeholder}
                         value={form[field.name]}
@@ -204,6 +221,7 @@ export default function Home() {
           </button>
         </form>
 
+        <p className="mt-4 text-center text-xs text-slate-400">TAREK</p>
         <p className="mt-4 text-center text-xs text-slate-400">
           The PDF is rendered from your local Word template via LibreOffice.
         </p>
