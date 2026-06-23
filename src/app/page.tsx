@@ -223,7 +223,7 @@ export default function Home() {
 
         <p className="mt-4 text-center text-xs text-slate-400">TAREK</p>
         <p className="mt-4 text-center text-xs text-slate-400">
-          The PDF is rendered from your local Word template via LibreOffice.
+          The PDF is generated from the Word template and rendered in the cloud.
         </p>
       </div>
     </main>

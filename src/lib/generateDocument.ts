@@ -2,14 +2,9 @@ import "server-only";
 
 import fs from "node:fs";
 import path from "node:path";
-import { promisify } from "node:util";
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
-import libre from "libreoffice-convert";
-
-// libreoffice-convert is callback-based; promisify the variant that lets us
-// pass extra options (so we can point it at a custom soffice binary path).
-const convertAsync = promisify(libre.convertWithOptions);
+import mammoth from "mammoth";
 
 /**
  * Absolute path to the .docx template, exactly as specified in the project
@@ -103,33 +98,119 @@ export function fillTemplate(data: DocumentData): Buffer {
   return doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" });
 }
 
+/** Wraps mammoth's body HTML in a full document with clean print styling. */
+function buildHtml(bodyHtml: string): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        font-family: "Helvetica Neue", Arial, sans-serif;
+        font-size: 11pt;
+        line-height: 1.5;
+        color: #1a1a1a;
+        margin: 0;
+      }
+      h1, h2, h3 { color: #111; margin: 0.6em 0 0.3em; line-height: 1.25; }
+      h1 { font-size: 18pt; }
+      h2 { font-size: 14pt; }
+      h3 { font-size: 12pt; }
+      p { margin: 0.4em 0; }
+      table { border-collapse: collapse; width: 100%; margin: 0.6em 0; }
+      td, th { border: 1px solid #cbd5e1; padding: 6px 9px; text-align: left; vertical-align: top; }
+      th { background: #f1f5f9; }
+      img { max-width: 100%; height: auto; }
+      ul, ol { margin: 0.4em 0; padding-left: 1.4em; }
+    </style>
+  </head>
+  <body>${bodyHtml}</body>
+</html>`;
+}
+
+/** Launches a headless Chromium, using @sparticuz/chromium on serverless and a
+ * locally installed Chrome/Edge during development. */
+async function launchBrowser() {
+  const puppeteer = (await import("puppeteer-core")).default;
+  const isServerless = !!(
+    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+  );
+
+  if (isServerless) {
+    const chromium = (await import("@sparticuz/chromium")).default;
+    return puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  const executablePath = process.env.CHROME_EXE ?? findLocalChrome();
+  if (!executablePath) {
+    throw new DocumentGenerationError(
+      "PDF conversion failed: no local Chrome/Edge browser was found for " +
+        "rendering. Install Google Chrome, or set the CHROME_EXE environment " +
+        "variable to a Chromium-based browser executable.",
+      503,
+    );
+  }
+  return puppeteer.launch({
+    executablePath,
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+}
+
+/** Returns the path to a locally installed Chromium-based browser, if any. */
+function findLocalChrome(): string | undefined {
+  const candidates = [
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+  ];
+  return candidates.find((p) => fs.existsSync(p));
+}
+
 /**
- * Converts a .docx Buffer into a PDF Buffer using LibreOffice (headless).
- * Requires LibreOffice to be installed on the host. The soffice binary can be
- * pointed at explicitly via the LIBRE_OFFICE_EXE env var.
+ * Converts a .docx Buffer into a PDF Buffer without any system dependency:
+ * mammoth turns the Word document into HTML, then headless Chromium renders
+ * that HTML to a PDF. Runs on Vercel's serverless functions.
  */
 export async function convertDocxToPdf(docxBuffer: Buffer): Promise<Buffer> {
-  const sofficeBinaryPaths = process.env.LIBRE_OFFICE_EXE
-    ? [process.env.LIBRE_OFFICE_EXE]
-    : [];
-
+  let bodyHtml: string;
   try {
-    return await convertAsync(docxBuffer, ".pdf", undefined, {
-      sofficeBinaryPaths,
-    });
+    const result = await mammoth.convertToHtml({ buffer: docxBuffer });
+    bodyHtml = result.value;
   } catch (err) {
-    const message = (err as Error).message ?? "";
-    if (/could not find soffice/i.test(message)) {
-      throw new DocumentGenerationError(
-        "PDF conversion failed: LibreOffice was not found. Install LibreOffice " +
-          "(https://www.libreoffice.org/download) or set the LIBRE_OFFICE_EXE " +
-          "environment variable to the full path of soffice.exe.",
-        503,
-      );
-    }
     throw new DocumentGenerationError(
-      `PDF conversion failed: ${message || "unknown error from LibreOffice."}`,
+      `Failed to read the generated document: ${(err as Error).message}`,
     );
+  }
+
+  let browser: Awaited<ReturnType<typeof launchBrowser>> | undefined;
+  try {
+    browser = await launchBrowser();
+    const page = await browser.newPage();
+    await page.setContent(buildHtml(bodyHtml), { waitUntil: "load" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "20mm", bottom: "20mm", left: "18mm", right: "18mm" },
+    });
+    return Buffer.from(pdf);
+  } catch (err) {
+    if (err instanceof DocumentGenerationError) throw err;
+    throw new DocumentGenerationError(
+      `PDF conversion failed: ${(err as Error).message || "unknown rendering error."}`,
+    );
+  } finally {
+    await browser?.close();
   }
 }
 
