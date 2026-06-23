@@ -1,36 +1,56 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MYFIN Report Generator
 
-## Getting Started
+A Next.js (App Router) tool that takes form input, fills a local Word
+(`.docx`) template, converts the result to PDF, and downloads it.
 
-First, run the development server:
+## How it works
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+1. **Form** ([src/app/page.tsx](src/app/page.tsx)) — collects the 12 template
+   fields and POSTs them as JSON, with loading and error states.
+2. **API route** ([src/app/api/generate/route.ts](src/app/api/generate/route.ts))
+   — validates the payload and runs the pipeline.
+3. **Pipeline** ([src/lib/generateDocument.ts](src/lib/generateDocument.ts)) —
+   reads the template, fills the `{placeholders}` with
+   [`docxtemplater`](https://docxtemplater.com/) + [`pizzip`](https://www.npmjs.com/package/pizzip),
+   then converts the `.docx` buffer to PDF with
+   [`libreoffice-convert`](https://www.npmjs.com/package/libreoffice-convert).
+   The PDF streams back with `Content-Type: application/pdf` and
+   `Content-Disposition: attachment`.
+
+## Template
+
+The template path is fixed to the project root:
+
+```
+RAPPORT MYFIN xx.docx
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+It must contain these `{}` placeholders: `status`, `name2`, `iban2`, `bic`,
+`bank`, `IBD`, `name1`, `iban1`, `amount`, `details`, `date`, `time`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Override the location with the `TEMPLATE_PATH` env var if needed.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Prerequisite: LibreOffice
 
-## Learn More
+PDF conversion is done by **LibreOffice running headless**, so it must be
+installed on the machine that runs the server.
 
-To learn more about Next.js, take a look at the following resources:
+- Download: https://www.libreoffice.org/download/download-libreoffice/
+- The app auto-detects `soffice.exe` in the standard install locations.
+- If it's installed somewhere non-standard, point at it explicitly:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+  ```bash
+  # Windows (PowerShell)
+  $env:LIBRE_OFFICE_EXE = "C:\Program Files\LibreOffice\program\soffice.exe"
+  ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Until LibreOffice is available the API returns a clear `503` error explaining
+this; the rest of the app (form + template fill) works regardless.
 
-## Deploy on Vercel
+## Run
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run dev      # http://localhost:3000
+npm run build    # production build
+npm start        # run the production build
+```
