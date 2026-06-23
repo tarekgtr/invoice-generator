@@ -12,10 +12,8 @@ A Next.js (App Router) tool that takes form input, fills a local Word
 3. **Pipeline** ([src/lib/generateDocument.ts](src/lib/generateDocument.ts)) —
    reads the template, fills the `{placeholders}` with
    [`docxtemplater`](https://docxtemplater.com/) + [`pizzip`](https://www.npmjs.com/package/pizzip),
-   converts the filled `.docx` to HTML with [`mammoth`](https://www.npmjs.com/package/mammoth),
-   then renders that HTML to PDF with headless Chromium
-   ([`puppeteer-core`](https://www.npmjs.com/package/puppeteer-core) +
-   [`@sparticuz/chromium`](https://www.npmjs.com/package/@sparticuz/chromium)).
+   then converts the `.docx` buffer to PDF with
+   [`libreoffice-convert`](https://www.npmjs.com/package/libreoffice-convert).
    The PDF streams back with `Content-Type: application/pdf` and
    `Content-Disposition: attachment`.
 
@@ -32,32 +30,61 @@ It must contain these `{}` placeholders: `status`, `name2`, `iban2`, `bic`,
 
 Override the location with the `TEMPLATE_PATH` env var if needed.
 
-## PDF rendering
+## Prerequisite: LibreOffice
 
-PDF conversion runs entirely in Node with **headless Chromium** — no system
-install (LibreOffice, etc.) is required, so it deploys to serverless hosts like
-**Vercel** out of the box.
+PDF conversion is done by **LibreOffice running headless**, so it must be
+installed on the machine that runs the server.
 
-- **On Vercel / AWS Lambda:** uses `@sparticuz/chromium`'s bundled browser
-  automatically (detected via the `VERCEL` / `AWS_LAMBDA_FUNCTION_NAME` env vars).
-- **Locally:** uses an installed Google Chrome or Microsoft Edge. Override the
-  executable with the `CHROME_EXE` env var if needed.
+- Download: https://www.libreoffice.org/download/download-libreoffice/
+- The app auto-detects `soffice.exe` in the standard install locations.
+- If it's installed somewhere non-standard, point at it explicitly:
 
-> Note: the PDF is produced by converting the Word document to HTML and
-> rendering it, so it is a clean, content-faithful PDF rather than a pixel-exact
-> copy of the original Word layout.
+  ```bash
+  # Windows (PowerShell)
+  $env:LIBRE_OFFICE_EXE = "C:\Program Files\LibreOffice\program\soffice.exe"
+  ```
 
-## Deploy to Vercel
+Until LibreOffice is available the API returns a clear `503` error explaining
+this; the rest of the app (form + template fill) works regardless.
 
-Push to GitHub and import the repo at [vercel.com/new](https://vercel.com/new).
-No extra configuration or environment variables are required. The
-`/api/generate` function is allotted up to 60s (`maxDuration`) to cover
-Chromium cold starts.
-
-## Run
+## Run locally
 
 ```bash
 npm run dev      # http://localhost:3000
 npm run build    # production build
 npm start        # run the production build
 ```
+
+For local PDF generation, install LibreOffice as described above.
+
+## Deploy with Docker (recommended)
+
+Because PDF conversion needs LibreOffice, this app deploys as a **Docker
+container** (not a pure serverless function). The included
+[Dockerfile](Dockerfile) installs LibreOffice headless plus metric-compatible
+fonts (Carlito → Calibri, Caladea → Cambria, Liberation → Arial/Times) so the
+report renders faithfully. Next.js is built in `output: "standalone"` mode to
+keep the image lean.
+
+Build and run it anywhere Docker runs:
+
+```bash
+docker build -t myfin-generator .
+docker run -p 3000:3000 myfin-generator   # http://localhost:3000
+```
+
+### Free hosting
+
+Any container host works. These all build the `Dockerfile` straight from the
+GitHub repo on their free tiers:
+
+- **Render** — New → Web Service → connect the repo → Runtime: *Docker*. It auto-detects the Dockerfile.
+- **Railway** — New Project → Deploy from GitHub repo (auto-detects the Dockerfile).
+- **Fly.io** — `fly launch` in the repo (uses the Dockerfile; pick a 512 MB+ VM).
+
+The container listens on `$PORT` (default `3000`); these platforms set `PORT`
+automatically. No other environment variables are required.
+
+> Note: free tiers spin the service down after inactivity, so the first request
+> after an idle period may take ~30–60s (cold start + LibreOffice warm-up).
+> Subsequent requests are fast.

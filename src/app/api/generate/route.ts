@@ -10,8 +10,6 @@ import {
 // runtime (not Edge) and disable caching.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Headless Chromium cold-start + render can exceed the default limit.
-export const maxDuration = 60;
 
 export async function POST(request: Request) {
   let payload: Record<string, unknown>;

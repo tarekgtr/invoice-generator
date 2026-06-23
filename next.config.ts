@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Keep the headless-Chromium packages out of the bundler so their binaries
-  // and dynamic requires are traced correctly on Vercel.
-  serverExternalPackages: ["@sparticuz/chromium", "puppeteer-core"],
+  // Emit a self-contained server bundle (.next/standalone) so the Docker
+  // image only needs Node + LibreOffice, not the full node_modules tree.
+  output: "standalone",
 };
 
 export default nextConfig;
