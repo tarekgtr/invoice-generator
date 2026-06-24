@@ -1,0 +1,18 @@
+# Local Docker run for the MYFIN Report Generator.
+#   docker compose up --build      # build + run on http://localhost:3000
+#   docker compose down            # stop
+#
+# Secrets (IBANAPI_KEY) are read at runtime from .env.local, which is gitignored.
+# .env.local is optional — the app runs without it, but the IBAN auto-fill will
+# report "not configured" until a key is provided.
+services:
+  app:
+    build: .
+    image: myfin-generator
+    container_name: myfin-generator
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env.local
+        required: false
+    restart: unless-stopped

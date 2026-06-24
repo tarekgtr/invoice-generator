@@ -87,6 +87,16 @@ Build and run it anywhere Docker runs:
 ```bash
 docker build -t myfin-generator .
 docker run -p 3000:3000 myfin-generator   # http://localhost:3000
+# with the IBAN key:
+docker run -p 3000:3000 --env-file .env.local myfin-generator
+```
+
+Or use the included [docker-compose.yml](docker-compose.yml), which builds the
+image and injects `.env.local` (for `IBANAPI_KEY`) automatically:
+
+```bash
+docker compose up --build   # http://localhost:3000
+docker compose down
 ```
 
 ### Free hosting
