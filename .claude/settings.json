@@ -3,7 +3,24 @@
     "allow": [
       "Bash(curl -s --max-time 120 -o /tmp/render.pdf -w 'HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n' -X POST https://invoice-generator-vdom.onrender.com/api/generate -H 'Content-Type: application/json' -d '{\"status\":\"Completed\",\"name2\":\"Jane Doe\",\"iban2\":\"DE89370400440532013000\",\"bic\":\"COBADEFFXXX\",\"bank\":\"Commerzbank\",\"IBD\":\"IBD-2026-0001\",\"name1\":\"John Smith\",\"iban1\":\"FR7630006000011234567890189\",\"amount\":\"12500\",\"details\":\"Invoice settlement\",\"date\":\"2026-06-23\",\"time\":\"14:30\"}')",
       "Bash(docker build *)",
-      "Bash(docker run *)"
+      "Bash(docker run *)",
+      "Bash(cat eslint.config.mjs)",
+      "Bash(cat .eslintrc*)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).scripts\\)\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"=== eslint exit: $? ===\")",
+      "Bash(curl -s --max-time 30 \"https://openiban.com/validate/DE89370400440532013000?getBIC=true&validateBankCode=true\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{try{const j=JSON.parse\\(s\\);console.log\\('valid:',j.valid\\);console.log\\('bankData.bic:',j.bankData&&j.bankData.bic\\);console.log\\('bankData.name:',j.bankData&&j.bankData.name\\);}catch\\(e\\){console.log\\('parse fail:',s.slice\\(0,200\\)\\)}}\\)\")",
+      "Bash(curl -s --max-time 30 -I \"https://openiban.com/validate/DE89370400440532013000?getBIC=true\")",
+      "Bash(curl -s --max-time 30 -D - -o /dev/null -H \"Origin: https://invoice-generator-vdom.onrender.com\" \"https://openiban.com/validate/DE89370400440532013000?getBIC=true&validateBankCode=true\")",
+      "Bash(curl -s --max-time 30 -D - -o /dev/null -X OPTIONS -H \"Origin: https://x.com\" -H \"Access-Control-Request-Method: GET\" \"https://openiban.com/validate/DE89370400440532013000\")",
+      "Bash(echo \"eslint exit: $?\")",
+      "Bash(curl -s --max-time 30 -w \"\\\\n[HTTP %{http_code}]\\\\n\" \"https://api.ibanapi.com/v1/validate/DE89370400440532013000?api_key=test123\")",
+      "Bash(IBANAPI_KEY=test123 npm run dev)",
+      "Bash(docker compose *)",
+      "Bash(sed 's/^/key occurrences: /')",
+      "Bash(git commit -q -m 'Add docker-compose.yml for local Docker runs *)",
+      "Bash(git commit -q -m 'Update local Claude Code permission allowlist *)"
     ]
   }
 }
