@@ -30,6 +30,22 @@ It must contain these `{}` placeholders: `status`, `name2`, `iban2`, `bic`,
 
 Override the location with the `TEMPLATE_PATH` env var if needed.
 
+## IBAN auto-fill (BIC & bank)
+
+When a beneficiary IBAN (`iban2`) is entered, the form asks the server route
+[src/app/api/iban/route.ts](src/app/api/iban/route.ts) to look up the BIC and
+bank name and auto-fills them. The route proxies **ibanapi.com** so the API key
+stays on the server (never exposed to the browser).
+
+Set the key via the `IBANAPI_KEY` environment variable (see [.env.example](.env.example)):
+
+- Get a free key at https://www.ibanapi.com/
+- **Local:** copy `.env.example` to `.env.local` and set `IBANAPI_KEY`.
+- **Render / Vercel:** add `IBANAPI_KEY` in the service's Environment settings.
+
+If the key is missing, the lookup returns a clear message and the user can still
+type BIC and bank manually — PDF generation is unaffected.
+
 ## Prerequisite: LibreOffice
 
 PDF conversion is done by **LibreOffice running headless**, so it must be

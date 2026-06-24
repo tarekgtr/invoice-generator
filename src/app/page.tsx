@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-type FieldType = "text" | "number" | "date" | "time";
+type FieldType = "text" | "number" | "date" | "time" | "select";
 
 type Field = {
   name: string;
   label: string;
   type: FieldType;
   placeholder?: string;
+  options?: string[];
 };
 
 type Section = {
@@ -16,24 +17,16 @@ type Section = {
   fields: Field[];
 };
 
+const STATUS_OPTIONS = ["Completed", "Signed", "Cancelled"];
+
 // Mirrors the {placeholders} in the RAPPORT MYFIN xx.docx template, grouped
 // for a cleaner form layout.
 const SECTIONS: Section[] = [
   {
     title: "Document",
     fields: [
-      {
-        name: "status",
-        label: "Status",
-        type: "text",
-        placeholder: "e.g. Completed",
-      },
-      {
-        name: "IBD",
-        label: "Document ID",
-        type: "text",
-        placeholder: "e.g. IBD-2026-0001",
-      },
+      { name: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+      { name: "IBD", label: "Document ID", type: "text", placeholder: "Auto-generated" },
     ],
   },
   {
@@ -49,11 +42,7 @@ const SECTIONS: Section[] = [
     title: "Ordering Customer",
     fields: [
       { name: "name1", label: "Ordering Customer Name", type: "text" },
-      {
-        name: "iban1",
-        label: "Ordering Customer Account (IBAN)",
-        type: "text",
-      },
+      { name: "iban1", label: "Ordering Customer Account (IBAN)", type: "text" },
     ],
   },
   {
@@ -73,13 +62,108 @@ const EMPTY_FORM = Object.fromEntries(
   ALL_FIELDS.map((f) => [f.name, ""]),
 ) as Record<string, string>;
 
+// --- helpers -------------------------------------------------------------
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Builds a document ID like `IBD20260508030972597` (IBD + date + random). */
+function generateIBD(): string {
+  const d = new Date();
+  const datePart = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  let rand = "";
+  for (let i = 0; i < 9; i++) rand += Math.floor(Math.random() * 10);
+  return `IBD${datePart}${rand}`;
+}
+
+/** Current system date/time formatted for <input type="date" | "time">. */
+function nowParts() {
+  const d = new Date();
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+type LookupState = {
+  status: "idle" | "loading" | "ok" | "error";
+  message?: string;
+};
+
+// --- component -----------------------------------------------------------
+
 export default function Home() {
-  const [form, setForm] = useState<Record<string, string>>(EMPTY_FORM);
+  const [form, setForm] = useState<Record<string, string>>({
+    ...EMPTY_FORM,
+    status: STATUS_OPTIONS[0],
+  });
+  const [manualDateTime, setManualDateTime] = useState(false);
+  const [lookup, setLookup] = useState<LookupState>({ status: "idle" });
+  const [lastLookedUp, setLastLookedUp] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Auto-generate the document ID once, on mount. This must run client-side in
+  // an effect (not during render) so Date/Math.random don't cause a hydration
+  // mismatch; the one-time setState here is intentional.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-only init, hydration-safe
+    setForm((prev) => ({ ...prev, IBD: generateIBD() }));
+  }, []);
+
+  // When not in manual mode, lock date & time to the current system values.
+  // Runs on mount and whenever the toggle is switched back off. Client-only for
+  // the same hydration reason as above.
+  useEffect(() => {
+    if (!manualDateTime) {
+      const { date, time } = nowParts();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs inputs to current time
+      setForm((prev) => ({ ...prev, date, time }));
+    }
+  }, [manualDateTime]);
+
   function update(name: string, value: string) {
     setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  // Look up BIC + bank name for a beneficiary IBAN via our own /api/iban proxy
+  // (which calls ibanapi.com server-side and keeps the API key secret).
+  async function lookupIban(rawIban: string) {
+    const iban = rawIban.replace(/\s+/g, "").toUpperCase();
+    if (iban.length < 15 || iban === lastLookedUp) return;
+    setLastLookedUp(iban);
+    setLookup({ status: "loading" });
+
+    try {
+      const res = await fetch(`/api/iban?iban=${encodeURIComponent(iban)}`);
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.valid && (data.bic || data.bank)) {
+        setForm((prev) => ({
+          ...prev,
+          bic: data.bic || prev.bic,
+          bank: data.bank || prev.bank,
+        }));
+        setLookup({ status: "ok", message: "BIC & bank auto-filled." });
+      } else if (res.ok && data?.valid) {
+        setLookup({
+          status: "error",
+          message: "No bank data for this IBAN — enter BIC & bank manually.",
+        });
+      } else {
+        setLookup({
+          status: "error",
+          message:
+            data?.error ??
+            "IBAN not recognized — check it, or enter details manually.",
+        });
+      }
+    } catch {
+      // Network error / rate limit — never block the user; allow manual entry.
+      setLookup({
+        status: "error",
+        message: "Lookup unavailable — enter BIC & bank manually.",
+      });
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -87,15 +171,22 @@ export default function Home() {
     setLoading(true);
     setError(null);
 
+    // Ensure auto date/time reflect the actual submission moment.
+    const submission = { ...form };
+    if (!manualDateTime) {
+      const { date, time } = nowParts();
+      submission.date = date;
+      submission.time = time;
+    }
+
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(submission),
       });
 
       if (!res.ok) {
-        // The API returns JSON ({ error }) on failure.
         let message = `Request failed (${res.status}).`;
         try {
           const data = await res.json();
@@ -106,7 +197,6 @@ export default function Home() {
         throw new Error(message);
       }
 
-      // Success: response is a PDF blob — trigger a download.
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
 
@@ -128,6 +218,77 @@ export default function Home() {
     }
   }
 
+  const inputClass =
+    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+
+  function renderField(field: Field) {
+    const isDateTime = field.name === "date" || field.name === "time";
+    const disabled = loading || (isDateTime && !manualDateTime);
+
+    let control;
+    if (field.type === "select") {
+      control = (
+        <select
+          id={field.name}
+          name={field.name}
+          value={form[field.name]}
+          onChange={(e) => update(field.name, e.target.value)}
+          disabled={disabled}
+          className={inputClass}
+        >
+          {field.options!.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      );
+    } else {
+      control = (
+        <input
+          id={field.name}
+          name={field.name}
+          type={field.type}
+          inputMode={field.type === "number" ? "decimal" : undefined}
+          step={field.type === "number" ? "any" : undefined}
+          placeholder={field.placeholder}
+          value={form[field.name]}
+          onChange={(e) => update(field.name, e.target.value)}
+          onBlur={
+            field.name === "iban2"
+              ? (e) => lookupIban(e.target.value)
+              : undefined
+          }
+          disabled={disabled}
+          className={inputClass}
+        />
+      );
+    }
+
+    return (
+      <div key={field.name} className="flex flex-col gap-1.5">
+        <label htmlFor={field.name} className="text-sm font-medium text-slate-700">
+          {field.label}
+        </label>
+        {control}
+        {field.name === "iban2" && lookup.status !== "idle" && (
+          <span
+            className={
+              "text-xs " +
+              (lookup.status === "loading"
+                ? "text-slate-400"
+                : lookup.status === "ok"
+                  ? "text-emerald-600"
+                  : "text-amber-600")
+            }
+          >
+            {lookup.status === "loading" ? "Looking up BIC & bank…" : lookup.message}
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 py-10 px-4 text-slate-900">
       <div className="mx-auto max-w-3xl">
@@ -136,8 +297,7 @@ export default function Home() {
             MYFIN Report Generator
           </h1>
           <p className="mt-1 text-sm text-slate-500">
-            Fill in the details below to generate and download the report as a
-            PDF.
+            Fill in the details below to generate and download the report as a PDF.
           </p>
         </header>
 
@@ -148,35 +308,32 @@ export default function Home() {
           <div className="space-y-8">
             {SECTIONS.map((section) => (
               <fieldset key={section.title} className="space-y-4">
-                <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  {section.title}
-                </legend>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {section.fields.map((field) => (
-                    <div key={field.name} className="flex flex-col gap-1.5">
-                      <label
-                        htmlFor={field.name}
-                        className="text-sm font-medium text-slate-700"
-                      >
-                        {field.label}
-                      </label>
+                <div className="flex items-center justify-between">
+                  <legend className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    {section.title}
+                  </legend>
+                  {section.title === "Transaction" && (
+                    <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-600">
                       <input
-                        id={field.name}
-                        name={field.name}
-                        type={field.type}
-                        inputMode={
-                          field.type === "number" ? "decimal" : undefined
-                        }
-                        step={field.type === "number" ? "any" : undefined}
-                        placeholder={field.placeholder}
-                        value={form[field.name]}
-                        onChange={(e) => update(field.name, e.target.value)}
+                        type="checkbox"
+                        checked={manualDateTime}
+                        onChange={(e) => setManualDateTime(e.target.checked)}
                         disabled={loading}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-300"
                       />
-                    </div>
-                  ))}
+                      Manual Date/Time Entry
+                    </label>
+                  )}
                 </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {section.fields.map(renderField)}
+                </div>
+                {section.title === "Transaction" && !manualDateTime && (
+                  <p className="text-xs text-slate-400">
+                    Date &amp; time are locked to the current system time. Enable
+                    “Manual Date/Time Entry” to set them yourself.
+                  </p>
+                )}
               </fieldset>
             ))}
           </div>
