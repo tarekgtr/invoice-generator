@@ -20,7 +20,9 @@
       "Bash(docker compose *)",
       "Bash(sed 's/^/key occurrences: /')",
       "Bash(git commit -q -m 'Add docker-compose.yml for local Docker runs *)",
-      "Bash(git commit -q -m 'Update local Claude Code permission allowlist *)"
+      "Bash(git commit -q -m 'Update local Claude Code permission allowlist *)",
+      "Bash(curl -s --max-time 60 -w \" [HTTP %{http_code}]\\\\n\" \"https://invoice-generator-vdom.onrender.com/api/iban?iban=DE89370400440532013000\")",
+      "Bash(git commit -q -m 'Remove leaked API key from .env.example *)"
     ]
   }
 }
