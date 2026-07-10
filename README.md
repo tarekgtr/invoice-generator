@@ -34,14 +34,22 @@ Override the location with the `TEMPLATE_PATH` env var if needed.
 
 When a beneficiary IBAN (`iban2`) is entered, the form asks the server route
 [src/app/api/iban/route.ts](src/app/api/iban/route.ts) to look up the BIC and
-bank name and auto-fills them. The route proxies **openIBAN**, which is free and
-**keyless** — no API key, no usage quota, nothing to configure (locally or in
-production).
+bank name and auto-fills them. The route uses a two-tier strategy:
 
-Coverage note: openIBAN's bank data is Europe-focused (DE, NL, BE, AT, CH, LU,
-…). For IBANs outside its coverage it still validates the number but may not
-return a BIC/bank, in which case those fields are simply typed manually — PDF
-generation is unaffected either way.
+1. **openIBAN** — free and keyless. Works out of the box, but its bank data is
+   limited to a few EU countries (DE, NL, …).
+2. **Keyed global fallback (ibanapi.com)** — used only when openIBAN returns no
+   bank data *and* `IBANAPI_KEY` is set. Covers more countries. The key is read
+   server-side (see [.env.example](.env.example)) and never sent to the browser.
+
+To enable global coverage, get a key (with bank-data credits) at
+https://www.ibanapi.com/ and set `IBANAPI_KEY`:
+
+- **Local:** copy `.env.example` to `.env.local` and set it there.
+- **Render / Vercel:** add `IBANAPI_KEY` in the service's Environment settings.
+
+Without a key, DE/NL still auto-fill via openIBAN and other countries fall back
+to manual entry — PDF generation is unaffected either way.
 
 ## Prerequisite: LibreOffice
 
