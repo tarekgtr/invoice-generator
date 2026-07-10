@@ -126,7 +126,7 @@ export default function Home() {
   }
 
   // Look up BIC + bank name for a beneficiary IBAN via our own /api/iban proxy
-  // (which calls ibanapi.com server-side and keeps the API key secret).
+  // (which calls the free, keyless openIBAN service server-side).
   async function lookupIban(rawIban: string) {
     const iban = rawIban.replace(/\s+/g, "").toUpperCase();
     if (iban.length < 15 || iban === lastLookedUp) return;
